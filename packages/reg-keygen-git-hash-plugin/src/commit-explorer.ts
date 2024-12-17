@@ -7,6 +7,7 @@ export class CommitExplorer {
   private _commitNodes!: CommitNode[];
   private _branchName!: string;
   private _branchNameCache: { [hash: string]: string[] } = {};
+  private _childBranchCache: { [branch: string]: boolean | undefined } = {};
 
   /*
    * e.g. return `[["a38df15", "8e1ac3a"], ["8e1ac3a", "7ba8507"]]`.
@@ -62,7 +63,12 @@ export class CommitExplorer {
       .containedBranches(hash)
       .split("\n")
       .filter(h => !!h)
-      .map(branch => branch.replace("*", "").trim());
+      .map(branch =>
+        branch
+          .replace("*", "")
+          .replace(/^(.*?) -> (.*)$/, "$2") // "remotes/origin/HEAD -> origin/master" -> "origin/master"
+          .trim(),
+      );
     this._branchNameCache[hash] = names;
     return names;
   }
@@ -105,7 +111,11 @@ export class CommitExplorer {
         const branches = this.getBranchNames(c);
         const hasCurrent = !!branches.find(b => this._branchName === b);
         const others = branches.filter(b => {
-          return !(b.endsWith(this._branchName) || (mergedBranches.length && mergedBranches.some(c => b === c)));
+          return !(
+            b.endsWith(this._branchName) ||
+            (mergedBranches.length && mergedBranches.some(c => b === c)) ||
+            this.isChildBranch(b)
+          );
         });
         return hasCurrent && !!others.length;
       });
@@ -114,6 +124,23 @@ export class CommitExplorer {
   isReachable(a: string, b: string) {
     const between = this._gitCmdClient.logBetween(a, b).trim();
     return !between;
+  }
+
+  isChildBranch(branch: string) {
+    const cache = this._childBranchCache[branch];
+    if (cache !== undefined) return cache;
+
+    const hashes = this._gitCmdClient
+      .logBetween(this._branchName, branch)
+      .trim()
+      .split("\n")
+      .map(l => l.split(" ").at(0))
+      .filter((h): h is Exclude<typeof h, undefined> => !!h);
+
+    const isChildBranch = hashes.length !== 0 && !hashes.some(h => this.getBranchNames(h).includes(this._branchName));
+
+    this._childBranchCache[branch] = isChildBranch;
+    return isChildBranch;
   }
 
   findBaseCommitHash(candidateHashes: string[], branchHash: string): string | undefined {

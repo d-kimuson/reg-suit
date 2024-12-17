@@ -218,6 +218,13 @@ test("merge multipe commit three", () => {
   assert.equal(expected, baseHash);
 });
 
+test("after-create-grand-child-branch", () => {
+  copyGitFiles("after-create-grand-child-branch");
+  const baseHash = new CommitExplorer().getBaseCommitHash();
+  const expected = execSync("git rev-parse expected", { encoding: "utf8" }).trim();
+  assert.equal(expected, baseHash);
+});
+
 test("error patter found in reg-suit repository", () => {
   copyGitFiles("reg-suit-error-pattern");
   const baseHash = new CommitExplorer().getBaseCommitHash();
